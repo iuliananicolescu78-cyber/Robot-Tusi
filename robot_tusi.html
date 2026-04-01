@@ -268,21 +268,21 @@
         <aside class="sidebar">
             <div class="badge">AI in romana</div>
             <h1>Robot Tusi</h1>
-            <p class="lead">Un asistent prietenos care raspunde in limba romana, direct in browser.</p>
+            <p class="lead">Un asistent prietenos care raspunde in limba romana, tine minte lucruri simple si te poate ghida pas cu pas.</p>
 
             <section class="tips">
-                <h2>Idei de intrebari</h2>
-                <p>"Salut, cine esti?"</p>
-                <p>"Ajuta-ma sa invat pentru scoala."</p>
-                <p>"Spune-mi o gluma."</p>
-                <p>"Scrie un mesaj frumos pentru o prietena."</p>
+                <h2>Ce stie mai bine acum</h2>
+                <p>"Ma cheama Ana."</p>
+                <p>"Explica-mi fractiile pe scurt."</p>
+                <p>"Fa-mi un plan de invatare pentru romana."</p>
+                <p>"Cat face 24 + 18?"</p>
             </section>
         </aside>
 
         <section class="chat">
             <header class="chat-header">
                 <strong>Conversatie cu Robot Tusi</strong>
-                <span>Scrie un mesaj si apasa pe butonul Trimite.</span>
+                <span>Scrie un mesaj, iar Robot Tusi raspunde mai clar si mai atent la context.</span>
             </header>
 
             <div class="messages" id="messages"></div>
@@ -301,7 +301,22 @@ const messages = document.getElementById("messages");
 const chatForm = document.getElementById("chatForm");
 const userInput = document.getElementById("userInput");
 
-const welcomeMessage = `Salut! Eu sunt Robot Tusi.\nPot sa vorbesc cu tine in romana, sa te incurajez, sa explic lucruri simple si sa te ajut cu texte scurte.`;
+const state = {
+    name: "",
+    favoriteTopic: "",
+    mood: "",
+    lastTopic: "",
+    history: []
+};
+
+function getGreeting() {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Buna dimineata";
+    if (hour < 18) return "Buna ziua";
+    return "Buna seara";
+}
+
+const welcomeMessage = `${getGreeting()}! Eu sunt Robot Tusi.\nPot sa vorbesc cu tine in romana, sa tin minte detalii simple despre conversatia noastra si sa explic lucruri mai clar.`;
 
 function addMessage(text, type) {
     const bubble = document.createElement("div");
@@ -318,62 +333,184 @@ function normalize(text) {
         .replace(/[\u0300-\u036f]/g, "");
 }
 
+function rememberUserDetails(original, clean) {
+    const nameMatch = original.match(/(?:ma cheama|numele meu este|eu sunt)\s+([A-Za-zĂÂÎȘȘȚŢăâîșșțţ\-]+)/i);
+    if (nameMatch) {
+        state.name = nameMatch[1].trim();
+    }
+
+    const topicMatch = original.match(/(?:imi place|iubesc|prefer)\s+([A-Za-zĂÂÎȘȘȚŢăâîșșțţ\-\s]{3,40})/i);
+    if (topicMatch) {
+        state.favoriteTopic = topicMatch[1].trim();
+    }
+
+    if (/(trist|suparat|stresat|obosit|emotionat|fericit|bucuros)/.test(clean)) {
+        state.mood = clean.match(/trist|suparat|stresat|obosit|emotionat|fericit|bucuros/)[0];
+    }
+}
+
+function detectMath(clean) {
+    const mathMatch = clean.match(/(-?\d+(?:[\.,]\d+)?)\s*([+\-*xX\/])\s*(-?\d+(?:[\.,]\d+)?)/);
+    if (!mathMatch) return null;
+
+    const a = Number(mathMatch[1].replace(",", "."));
+    const operator = mathMatch[2];
+    const b = Number(mathMatch[3].replace(",", "."));
+
+    if (Number.isNaN(a) || Number.isNaN(b)) return null;
+
+    let result;
+    if (operator === "+") result = a + b;
+    if (operator === "-") result = a - b;
+    if (operator === "*" || operator.toLowerCase() === "x") result = a * b;
+    if (operator === "/") {
+        if (b === 0) return "Nu pot imparti la zero.";
+        result = a / b;
+    }
+
+    return `Rezultatul este ${result}. Daca vrei, iti arat si cum se calculeaza.`;
+}
+
+function explainTopic(clean) {
+    if (/(fractie|fractii)/.test(clean)) {
+        state.lastTopic = "fractii";
+        return "Fractiile arata parti dintr-un intreg. Numarul de sus se numeste numarator si arata cate parti luam, iar cel de jos se numeste numitor si arata in cate parti egale a fost impartit intregul. Exemplu: 3/4 inseamna trei parti din patru.";
+    }
+
+    if (/(substantiv)/.test(clean)) {
+        state.lastTopic = "substantiv";
+        return "Substantivul este partea de vorbire care denumeste fiinte, lucruri, locuri, fenomene ale naturii sau idei. Exemplu: copil, carte, oras, ploaie, bucurie.";
+    }
+
+    if (/(adunare|scadere|inmultire|impartire)/.test(clean)) {
+        state.lastTopic = "matematica";
+        return "Pot sa te ajut la matematica pas cu pas. Scrie exercitiul exact, iar eu il desfac in etape simple.";
+    }
+
+    return null;
+}
+
+function buildStudyPlan(clean) {
+    if (!/(plan|program)/.test(clean)) return null;
+    if (/(romana|limba romana)/.test(clean)) {
+        state.lastTopic = "romana";
+        return "Iata un plan scurt pentru limba romana:\n1. Citeste 20 de minute un text.\n2. Noteaza 5 cuvinte noi.\n3. Recapituleaza o regula de gramatica.\n4. Scrie 5 propozitii corecte.\n5. Fa o pauza de 10 minute si repeta.";
+    }
+    if (/(matematica)/.test(clean)) {
+        state.lastTopic = "matematica";
+        return "Iata un plan simplu pentru matematica:\n1. Recapituleaza formula sau regula.\n2. Rezolva 3 exercitii usoare.\n3. Rezolva 2 exercitii medii.\n4. Verifica greselile.\n5. Refa exercitiul unde ai ezitat.";
+    }
+    return "Pot face un plan de invatare. Spune-mi materia si cat timp ai la dispozitie.";
+}
+
+function buildEncouragement() {
+    const messagesList = [
+        "Esti mai capabil decat pare in momentul acesta. Hai sa luam totul pe rand.",
+        "Nu trebuie sa rezolvi totul perfect din prima. Un pas mic este suficient pentru inceput.",
+        "Respira putin. Sunt aici si putem descurca problema impreuna."
+    ];
+    return messagesList[Math.floor(Math.random() * messagesList.length)];
+}
+
+function buildPersonalReply() {
+    if (!state.name) return "";
+    return `${state.name}, `;
+}
+
+function buildFallback() {
+    const prefix = buildPersonalReply();
+    const hints = [];
+
+    if (state.lastTopic) {
+        hints.push(`Ultima tema despre care am vorbit a fost ${state.lastTopic}.`);
+    }
+
+    if (state.favoriteTopic) {
+        hints.push(`Stiu deja ca iti place ${state.favoriteTopic}.`);
+    }
+
+    if (state.mood) {
+        hints.push(`Am observat si ca te simti ${state.mood}.`);
+    }
+
+    const base = `${prefix}am inteles mesajul tau si vreau sa raspund cat mai util.`;
+    if (!hints.length) {
+        return `${base} Daca imi dai mai multe detalii, pot fi mai precis.`;
+    }
+
+    return `${base} ${hints.join(" ")} Spune-mi exact ce vrei sa fac mai departe.`;
+}
+
 function buildAnswer(text) {
     const clean = normalize(text);
+    rememberUserDetails(text, clean);
+    state.history.push(text);
+    if (state.history.length > 6) state.history.shift();
+
+    const prefix = buildPersonalReply();
+    const mathAnswer = detectMath(clean);
+    if (mathAnswer) return prefix + mathAnswer;
+
+    const explanation = explainTopic(clean);
+    if (explanation) return prefix + explanation;
+
+    const plan = buildStudyPlan(clean);
+    if (plan) return prefix + plan;
 
     if (/(salut|buna|hello|hei|neata)/.test(clean)) {
-        return "Salut! Ma bucur sa vorbim. Cu ce te pot ajuta astazi?";
+        return `${getGreeting()}! ${state.name ? `Ma bucur sa te revad, ${state.name}.` : "Ma bucur sa vorbim."} Cu ce te pot ajuta?`;
     }
 
     if (/(cine esti|cum te cheama|numele tau)/.test(clean)) {
-        return "Eu sunt Robot Tusi, un mic AI in romana creat ca sa vorbeasca frumos si simplu cu tine.";
+        return "Eu sunt Robot Tusi, un AI in romana creat sa explice simplu, sa tina minte detalii utile si sa ofere raspunsuri calde si clare.";
     }
 
     if (/(ce poti|ajuta|help)/.test(clean)) {
-        return "Pot sa raspund la intrebari simple, sa compun mesaje scurte, sa ofer idei si sa explic pe intelesul tau diverse lucruri.";
+        return "Pot sa explic lectii pe scurt, sa fac planuri de invatare, sa compun mesaje, sa raspund la calcule simple si sa tin minte cateva detalii din discutia noastra.";
     }
 
     if (/(gluma|amuzant|rade)/.test(clean)) {
-        return "Sigur: De ce a luat caietul nota mare? Pentru ca era plin de idei bune.";
+        return prefix + "Sigur: De ce a venit creionul la scoala fericit? Pentru ca avea mereu un varf bun de idee.";
     }
 
     if (/(scoala|tema|invata|lectie)/.test(clean)) {
-        return "Te pot ajuta sa inveti pas cu pas. Spune-mi materia si iti explic cat mai simplu.";
+        return prefix + "Te pot ajuta sa inveti pas cu pas. Spune-mi materia, clasa sau exercitiul si iti explic simplu.";
     }
 
-    if (/(trist|suparat|obosita|obosit|stresat)/.test(clean)) {
-        return "Imi pare rau ca iti este greu. Hai sa luam lucrurile usor: respira adanc, spune-mi ce te apasa si incerc sa te sustin.";
+    if (/(trist|suparat|obosit|stresat)/.test(clean)) {
+        return prefix + buildEncouragement();
     }
 
-    if (/(mesaj|scrie un text|compune)/.test(clean)) {
-        return "Desigur. Spune-mi pentru cine este mesajul si ce ton vrei: cald, politicos, amuzant sau scurt.";
+    if (/(fericit|bucuros|bine dispus)/.test(clean)) {
+        return prefix + "Ma bucur sa aud asta. Putem folosi energia buna pentru ceva frumos sau util.";
+    }
+
+    if (/(mesaj|scrie un text|compune|scrisoare)/.test(clean)) {
+        return prefix + "Desigur. Spune-mi pentru cine este mesajul, ce ton vrei si cat de lung sa fie.";
     }
 
     if (/(multumesc|mersi)/.test(clean)) {
-        return "Cu drag. Sunt aici daca mai ai nevoie de mine.";
+        return prefix + "Cu drag. Daca vrei, continuam.";
+    }
+
+    if (/(ce ai tinut minte|ce stii despre mine)/.test(clean)) {
+        const memory = [];
+        if (state.name) memory.push(`te cheama ${state.name}`);
+        if (state.favoriteTopic) memory.push(`iti place ${state.favoriteTopic}`);
+        if (state.mood) memory.push(`te simti ${state.mood}`);
+
+        if (!memory.length) {
+            return "Deocamdata stiu foarte putine despre tine. Daca vrei, spune-mi cum te cheama sau ce iti place.";
+        }
+
+        return `Am tinut minte ca ${memory.join(", iar ")}.`;
     }
 
     if (/(pa|la revedere|bye)/.test(clean)) {
-        return "Pe curand! Sa ai o zi frumoasa.";
+        return `${state.name ? `${state.name}, ` : ""}pe curand! Sa ai o zi frumoasa.`;
     }
 
-    const starters = [
-        "Inteleg. ",
-        "Sigur. ",
-        "Bine, hai sa vedem. ",
-        "Am priceput. "
-    ];
-
-    const endings = [
-        "Daca vrei, imi poti da mai multe detalii.",
-        "Pot sa te ajut mai bine daca imi spui exact ce doresti.",
-        "Continua cu un exemplu si raspund mai precis.",
-        "Reformuleaza putin, iar eu iti raspund mai clar."
-    ];
-
-    const starter = starters[Math.floor(Math.random() * starters.length)];
-    const ending = endings[Math.floor(Math.random() * endings.length)];
-    return starter + "Robot Tusi a inteles mesajul tau si incearca sa raspunda cat mai clar. " + ending;
+    return buildFallback();
 }
 
 chatForm.addEventListener("submit", event => {
